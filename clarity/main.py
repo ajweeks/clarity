@@ -1,6 +1,5 @@
 from pathlib import Path
 import random
-from textwrap import dedent
 import openai
 from anthropic import Anthropic
 from pydantic import BaseModel
@@ -10,6 +9,7 @@ import yaml
 import constants  # Needs to be imported first, as it loads the environment variables.
 from formatting import mk_diff, fmt_diff_toggles
 from llm import ai_stream
+from prompts import DEFAULT_SYSTEM_NAME, SYSTEM_PROMPTS
 
 
 class Config(BaseModel):
@@ -73,45 +73,23 @@ def main():
         """
     )
 
-    system_prompts = {
-        "Fix typos": """
-            You are a meticulous copy editor. Correct spelling, grammar, punctuation, and basic phrasing mistakes.
-            Preserve the original meaning and tone. Keep sentence structure unless a change is needed for correctness.
-            Fix minor formatting issues (spacing, quotes, bullets). Use inclusive language when applicable.
-            Output only the corrected text with no commentary.
-            """,
-        "Heavy fix": """
-            You are an expert editor and stylist. Improve clarity, flow, and idiomatic phrasing while preserving meaning.
-            Replace vague or repetitive words with more precise, natural alternatives. Vary sentence structure for readability.
-            Fix grammar, punctuation, and formatting issues; ensure a professional, inclusive tone.
-            Output only the revised text with no commentary.
-            """,
-        "Custom": "",
-    }
-
     if "system_name" not in st.session_state:
-        st.session_state.system_name = "Fix typos"
+        st.session_state.system_name = DEFAULT_SYSTEM_NAME
     if "prompt_text" not in st.session_state:
-        st.session_state.prompt_text = dedent(
-            system_prompts[st.session_state.system_name]
-        ).strip()
+        st.session_state.prompt_text = SYSTEM_PROMPTS[st.session_state.system_name]
     if "pending_system_name" not in st.session_state:
         st.session_state.pending_system_name = None
 
     def on_prompt_select() -> None:
         if st.session_state.system_name == "Custom":
             return
-        st.session_state.prompt_text = dedent(
-            system_prompts[st.session_state.system_name]
-        ).strip()
+        st.session_state.prompt_text = SYSTEM_PROMPTS[st.session_state.system_name]
 
     def on_prompt_edit() -> None:
         st.session_state.pending_system_name = "Custom"
 
     if st.session_state.system_name != "Custom":
-        selected_prompt = dedent(
-            system_prompts[st.session_state.system_name]
-        ).strip()
+        selected_prompt = SYSTEM_PROMPTS[st.session_state.system_name]
         if st.session_state.prompt_text != selected_prompt:
             st.session_state.pending_system_name = "Custom"
 
@@ -121,7 +99,7 @@ def main():
 
     system_name = st.radio(
         "Prompt",
-        list(system_prompts.keys()),
+        list(SYSTEM_PROMPTS.keys()),
         horizontal=True,
         key="system_name",
         on_change=on_prompt_select,
