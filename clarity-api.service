@@ -1,0 +1,14 @@
+[Unit]
+Description=Clarity FastAPI backend for static website integration
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/clarity
+EnvironmentFile=/srv/clarity/.env.api
+ExecStart=/usr/bin/env uv run --frozen clarity-api
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
