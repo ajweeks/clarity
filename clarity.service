@@ -1,9 +1,9 @@
 [Unit]
-Description=Streamlit app to correct typos with an LLM.
+Description=Streamlit app to improve text with an LLM.
 After=network.target
 
 [Service]
-WorkingDirectory=/srv/typofixer
+WorkingDirectory=/srv/clarity
 ExecStart=make run
 
 [Install]

@@ -36,7 +36,7 @@ class Config(BaseModel):
 
 
 def main():
-    st.set_page_config(initial_sidebar_state="expanded", page_title="LLM Typo Fixer")
+    st.set_page_config(initial_sidebar_state="expanded", page_title="Clarity")
 
     config = Config.load()
     client = openai.OpenAI(
@@ -44,7 +44,7 @@ def main():
         base_url=config.api_base,
     )
 
-    st.title("LLM Typo Fixer")
+    st.title("Clarity")
 
     all_hearts = "❤️-🧡-💛-💚-💙-💜-🖤-🤍-🤎-💖-❤️‍🔥".split("-")
     heart = random.choice(all_hearts)
@@ -60,7 +60,7 @@ def main():
         4. You click to toggle between the original and new version.
         5. Copy-Paste once you're happy!
 
-        Made with {heart} by [Diego Dorn](https://ddorn.fr).
+        Made with {heart} by [AJ Weeks](https://ajweeks.com), based on [Diego Dorn's](https://ddorn.fr) [Typo Fixer](https://github.com/ddorn/typofixer).
         """
     )
 
@@ -70,7 +70,7 @@ def main():
         Your data is sent to my server, where it is not stored and is forwarded to
         Groq/OpenAI/Anthropic depending on your choice of model. I only log the size of the requests to monitor usage.
         You can also run this locally by following the instructions on the [GitHub repo](
-        https://github.com/ddorn/typofixer). Groq claims to not store/train on/sell your data, and OpenAI/Anthropic
+        https://github.com/ajweeks/clarity). Groq claims to not store/train on/sell your data, and OpenAI/Anthropic
         do the same, but might keep it for 30 days, unless it is classified as violating their TOS, in which case
         they keep if for up to 2 years.
         """

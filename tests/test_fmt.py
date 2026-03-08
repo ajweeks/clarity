@@ -1,6 +1,6 @@
 import pytest
 
-from typofixer.formatting import mk_diff, pair_up_diff
+from clarity.formatting import mk_diff, pair_up_diff
 
 
 @pytest.mark.parametrize(

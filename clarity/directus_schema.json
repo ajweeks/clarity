@@ -4,14 +4,14 @@
   "vendor": "sqlite",
   "collections": [
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "meta": {
         "accountability": "all",
         "archive_app_filter": true,
         "archive_field": null,
         "archive_value": null,
         "collapse": "open",
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "color": null,
         "display_template": null,
         "group": null,
@@ -28,17 +28,17 @@
         "versioning": false
       },
       "schema": {
-        "name": "typofixer_requests"
+        "name": "clarity_requests"
       }
     }
   ],
   "fields": [
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "id",
       "type": "integer",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -59,7 +59,7 @@
       },
       "schema": {
         "name": "id",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "integer",
         "default_value": null,
         "max_length": null,
@@ -76,11 +76,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "date_created",
       "type": "timestamp",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": "datetime",
         "display_options": {
@@ -106,7 +106,7 @@
       },
       "schema": {
         "name": "date_created",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "datetime",
         "default_value": null,
         "max_length": null,
@@ -123,11 +123,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "input_tokens",
       "type": "integer",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -150,7 +150,7 @@
       },
       "schema": {
         "name": "input_tokens",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "integer",
         "default_value": null,
         "max_length": null,
@@ -167,11 +167,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "output_tokens",
       "type": "float",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -194,7 +194,7 @@
       },
       "schema": {
         "name": "output_tokens",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "float",
         "default_value": null,
         "max_length": null,
@@ -211,11 +211,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "model",
       "type": "text",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -236,7 +236,7 @@
       },
       "schema": {
         "name": "model",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "text",
         "default_value": null,
         "max_length": null,
@@ -253,11 +253,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "input_length",
       "type": "integer",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -280,7 +280,7 @@
       },
       "schema": {
         "name": "input_length",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "integer",
         "default_value": null,
         "max_length": null,
@@ -297,11 +297,11 @@
       }
     },
     {
-      "collection": "typofixer_requests",
+      "collection": "clarity_requests",
       "field": "output_length",
       "type": "integer",
       "meta": {
-        "collection": "typofixer_requests",
+        "collection": "clarity_requests",
         "conditions": null,
         "display": null,
         "display_options": null,
@@ -324,7 +324,7 @@
       },
       "schema": {
         "name": "output_length",
-        "table": "typofixer_requests",
+        "table": "clarity_requests",
         "data_type": "integer",
         "default_value": null,
         "max_length": null,
@@ -343,3 +343,4 @@
   ],
   "relations": []
 }
+

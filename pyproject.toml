@@ -1,8 +1,8 @@
 [project]
-name = "typofixer"
+name = "clarity"
 version = "0.1.0"
-description = "A simple tool to fix typos w=using LLM and seeing the difference."
-authors = [{ name = "ddorn", email = "diego.dorn@free.fr" }]
+description = "A simple AI-powered text correction tool."
+authors = [{ name = "ajweeks", email = "contact@ajweeks.com" }]
 requires-python = "~=3.11"
 readme = "README.md"
 license = "WTFPL"
@@ -10,12 +10,15 @@ dependencies = [
     "openai>=1.41.1,<2",
     "anthropic>=0.34.1,<0.35",
     "streamlit>=1.37.1,<2",
+    "fastapi>=0.116.1,<0.117",
+    "uvicorn>=0.35.0,<0.36",
     "tiktoken>=0.6.0,<0.7",
     "python-dotenv>=1.0.1",
 ]
 
 [project.scripts]
-typofixer = "typofixer.cli:cli"
+clarity = "clarity.cli:cli"
+clarity-api = "clarity.api:serve"
 
 [dependency-groups]
 dev = [
@@ -25,7 +28,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["typofixer"]
+packages = ["clarity"]
 
 [build-system]
 requires = ["hatchling"]

@@ -189,21 +189,21 @@ class DirectusUsageTracker(UsageTracker):
 def tracker():
 
     default_log_file = Path(__file__).parent.parent / "logs.jsonl"
-    TYPOFIXER_LOG_FILE = os.getenv("TYPOFIXER_LOG_FILE", str(default_log_file))
+    CLARITY_LOG_FILE = os.getenv("CLARITY_LOG_FILE", str(default_log_file))
 
     DIRECTUS_DOMAIN = os.getenv("DIRECTUS_DOMAIN")
-    DIRECTUS_COLLECTION = os.getenv("DIRECTUS_COLLECTION", "typofixer_requests")
+    DIRECTUS_COLLECTION = os.getenv("DIRECTUS_COLLECTION", "clarity_requests")
     DIRECTUS_TOKEN = os.getenv("DIRECTUS_TOKEN")
     DIRECTUS_DISABLE = os.getenv("DIRECTUS_DISABLE")
 
     if DIRECTUS_DISABLE:
-        return FileUsageTracker(TYPOFIXER_LOG_FILE)
+        return FileUsageTracker(CLARITY_LOG_FILE)
     elif not DIRECTUS_TOKEN:
         warnings.warn("No DIRECTUS_TOKEN set, logging to file.")
-        return FileUsageTracker(TYPOFIXER_LOG_FILE)
+        return FileUsageTracker(CLARITY_LOG_FILE)
     elif not DIRECTUS_DOMAIN:
         warnings.warn("No DIRECTUS_URL set, logging to file.")
-        return FileUsageTracker(TYPOFIXER_LOG_FILE)
+        return FileUsageTracker(CLARITY_LOG_FILE)
     else:
         return DirectusUsageTracker(
             domain=DIRECTUS_DOMAIN,
