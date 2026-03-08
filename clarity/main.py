@@ -2,9 +2,9 @@ from pathlib import Path
 import random
 from textwrap import dedent
 import openai
+from anthropic import Anthropic
 from pydantic import BaseModel
 import streamlit as st
-import streamlit.components.v1 as components
 import yaml
 
 import constants  # Needs to be imported first, as it loads the environment variables.
@@ -12,18 +12,10 @@ from formatting import mk_diff, fmt_diff_toggles
 from llm import ai_stream
 
 
-def setup_analytics():
-    components.html(
-        """
-        <script async defer src="https://umami.therandom.space/script.js" data-website-id="66045f1a-46b5-41a1-9d29-daa734b222a8"></script>
-        """,
-        height=0,
-    )
-
-
 class Config(BaseModel):
     api_base: str | None = None
     api_key: str | None = None
+    provider: str = "anthropic"  # "openai" or "anthropic"
 
     @classmethod
     def load(cls) -> "Config":
@@ -36,15 +28,21 @@ class Config(BaseModel):
 
 
 def main():
-    st.set_page_config(initial_sidebar_state="expanded", page_title="Clarity")
+    st.set_page_config(initial_sidebar_state="collapsed", page_title="Clarity")
 
     config = Config.load()
-    client = openai.OpenAI(
-        api_key=config.api_key,
-        base_url=config.api_base,
-    )
+    if config.provider == "anthropic":
+        client = Anthropic(
+            api_key=config.api_key,
+            base_url=config.api_base,
+        )
+    else:
+        client = openai.OpenAI(
+            api_key=config.api_key,
+            base_url=config.api_base,
+        )
 
-    st.title("Clarity")
+    st.title("Clarity", anchor=False)
 
     all_hearts = "❤️-🧡-💛-💚-💙-💜-🖤-🤍-🤎-💖-❤️‍🔥".split("-")
     heart = random.choice(all_hearts)
@@ -53,14 +51,13 @@ def main():
         f"""
         # How to use this tool?
         It's simple.
-        1. You input a text
-        2. An LLM rewrites it
-        3. You see the differences:
+        1. Paste in some text
+        2. Get an AI to improve it
+        3. Review the suggestions:
             :red[red text is yours], :green[green is suggestions].
-        4. You click to toggle between the original and new version.
-        5. Copy-Paste once you're happy!
+        4. Click to toggle diffs between the original and new version.
 
-        Made with {heart} by [AJ Weeks](https://ajweeks.com), based on [Diego Dorn's](https://ddorn.fr) [Typo Fixer](https://github.com/ddorn/typofixer).
+        Made with {heart} by [AJ Weeks](https://ajweeks.com), forked from [Diego Dorn](https://ddorn.fr)'s [typofixer](https://github.com/ddorn/typofixer).
         """
     )
 
@@ -76,52 +73,89 @@ def main():
         """
     )
 
-    # with st.sidebar:
-    #     setup_analytics()  # Doesn't actually work
-
     system_prompts = {
         "Fix typos": """
-            You are given a text and you need to fix the language (typos, grammar, ...).
-            If needed, fix the formatting and, when relevant, ensure the text is inclusive.
-            Output directly the corrected text, without any comment.
+            You are a meticulous copy editor. Correct spelling, grammar, punctuation, and basic phrasing mistakes.
+            Preserve the original meaning and tone. Keep sentence structure unless a change is needed for correctness.
+            Fix minor formatting issues (spacing, quotes, bullets). Use inclusive language when applicable.
+            Output only the corrected text with no commentary.
             """,
         "Heavy fix": """
-            You are given a text and you need to fix the language (typos, grammar, ...).
-            If needed, fix the formatting and, when relevant, ensure the text is inclusive.
-            Please also reformulate the text when needed, use better words and make it more clear.
-            Output directly the corrected text, without any comment.
+            You are an expert editor and stylist. Improve clarity, flow, and idiomatic phrasing while preserving meaning.
+            Replace vague or repetitive words with more precise, natural alternatives. Vary sentence structure for readability.
+            Fix grammar, punctuation, and formatting issues; ensure a professional, inclusive tone.
+            Output only the revised text with no commentary.
             """,
         "Custom": "",
     }
 
+    if "system_name" not in st.session_state:
+        st.session_state.system_name = "Fix typos"
+    if "prompt_text" not in st.session_state:
+        st.session_state.prompt_text = dedent(
+            system_prompts[st.session_state.system_name]
+        ).strip()
+    if "pending_system_name" not in st.session_state:
+        st.session_state.pending_system_name = None
+
+    def on_prompt_select() -> None:
+        if st.session_state.system_name == "Custom":
+            return
+        st.session_state.prompt_text = dedent(
+            system_prompts[st.session_state.system_name]
+        ).strip()
+
+    def on_prompt_edit() -> None:
+        st.session_state.pending_system_name = "Custom"
+
+    if st.session_state.system_name != "Custom":
+        selected_prompt = dedent(
+            system_prompts[st.session_state.system_name]
+        ).strip()
+        if st.session_state.prompt_text != selected_prompt:
+            st.session_state.pending_system_name = "Custom"
+
+    if st.session_state.pending_system_name:
+        st.session_state.system_name = st.session_state.pending_system_name
+        st.session_state.pending_system_name = None
+
     system_name = st.radio(
-        "Preset instructions for the LLM", list(system_prompts.keys()), horizontal=True
+        "Prompt",
+        list(system_prompts.keys()),
+        horizontal=True,
+        key="system_name",
+        on_change=on_prompt_select,
     )
     assert system_name is not None  # For type checker
 
-    with st.form(key="fix"):
+    with st.expander("Prompt", expanded=False):
+        st.text_area(
+            "Prompt text",
+            max_chars=constants.MAX_CHARS,
+            key="prompt_text",
+            on_change=on_prompt_edit,
+        )
 
-        # Allow for custom prompts also
-        if system_name == "Custom":
-            system = st.text_area(
-                "Custom prompt",
-                value=dedent(system_prompts["Fix typos"]).strip(),
-                max_chars=constants.MAX_CHARS,
+    with st.form(key="fix"):
+        system = st.session_state.prompt_text
+
+        text = st.text_area(
+            "Text to fix",
+            max_chars=constants.MAX_CHARS,
+            height=220,
+        )
+
+        if config.provider == "openai":
+            models = client.models.list()
+            model_names = [model.id for model in models.data]
+            # Sort: groq first, then alphabetically
+            model_names.sort(key=lambda x: ("groq" not in x, x))
+            model = st.selectbox(
+                "Model",
+                model_names,
             )
         else:
-            system = dedent(system_prompts[system_name]).strip()
-            st.code(system, language="text")
-
-        text = st.text_area("Text to fix", max_chars=constants.MAX_CHARS)
-
-        models = client.models.list()
-        model_names = [model.id for model in models.data]
-        # Sort: groq first, then alphabetically
-        model_names.sort(key=lambda x: ("groq" not in x, x))
-        model = st.selectbox(
-            "Model",
-            model_names,
-        )
+            model = "claude-sonnet-4-6"
         assert model is not None  # For the type checker.
 
         lets_gooo = st.form_submit_button("Fix", type="primary")

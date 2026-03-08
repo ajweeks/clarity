@@ -1,12 +1,11 @@
 # Clarity
 
 It's simple.
-1. You input a text
-2. An LLM rewrites it
-3. You see the differences:
+1. Paste in some text
+2. Get an AI to improve it
+3. Review the suggestions:
     :red[red text is yours], :green[green is suggestions].
-4. You click to toggle between the original and new version.
-5. Copy-Paste once you're happy!
+4. Click to toggle diffs between the original and new version.
 
 ![Clarity](./images/screenshot.webp)
 
@@ -18,8 +17,8 @@ The simplest way to run the app locally is using [`uvx`](https://docs.astral.sh/
 uvx git+https://github.com/ajweeks/clarity
 ```
 
-Note that you need to have the `OPENAI_API_KEY` environment variable set to your OpenAI API key to
-use OpenAI models, or to create a `config.yaml` file in the `typos_web` directory with the following to use any OpenAI compatible API:
+Note that you need to have the `ANTHROPIC_API_KEY` environment variable set to your Anthropic API key to
+use Anthropic models by default, or create a `config.yaml` file in the `clarity_web` directory with the following to use any compatible API provider:
 
 ```yaml
 # config.yaml
@@ -27,10 +26,8 @@ api_base: ...
 api_key: ...
 ```
 
-I recomand [LiteLLM Proxy](https://docs.litellm.ai/docs/proxy/docker_quick_start) with a free supabase backend.
-
 ## Modify and run locally (or to set up your own instance)
 
 ```bash
-uv run streamlit run typofixer/main.py
+uv run streamlit run clarity/main.py
 ```
