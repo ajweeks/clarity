@@ -65,11 +65,9 @@ def main():
         """
         ## Privacy
         Your data is sent to my server, where it is not stored and is forwarded to
-        Groq/OpenAI/Anthropic depending on your choice of model. I only log the size of the requests to monitor usage.
+        OpenAI/Anthropic depending on your choice of model.
         You can also run this locally by following the instructions on the [GitHub repo](
-        https://github.com/ajweeks/clarity). Groq claims to not store/train on/sell your data, and OpenAI/Anthropic
-        do the same, but might keep it for 30 days, unless it is classified as violating their TOS, in which case
-        they keep if for up to 2 years.
+        https://github.com/ajweeks/clarity).
         """
     )
 
