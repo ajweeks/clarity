@@ -11,22 +11,12 @@ It's simple.
 
 ## Run locally
 
-The simplest way to run the app locally is using [`uvx`](https://docs.astral.sh/uv/#scripts)
-
 ```bash
-uvx git+https://github.com/ajweeks/clarity
+cp .env.example .env   # add your ANTHROPIC_API_KEY
+make dev               # http://127.0.0.1:9114, login disabled
 ```
 
-Note that you need to have the `ANTHROPIC_API_KEY` set to use Anthropic models by default. Otherwise, set `OPENAI_API_KEY` to use OpenAI models.
+## Host it
 
-## Modify and run locally (or to set up your own instance)
-
-```bash
-uv run streamlit run clarity/main.py
-```
-
-## Run as a backend API (for static sites like GitHub Pages)
-
-If your frontend is on GitHub Pages, keep your API key private by running this repo's API service on your home server.
-
-For setup and deployment steps, see [server-instructions.md](./server-instructions.md).
+`make run` serves the app at https://clarity.ajweeks.com through a Cloudflare Tunnel,
+behind a password + Cloudflare Turnstile login. See [server-instructions.md](./server-instructions.md).

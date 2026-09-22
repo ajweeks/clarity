@@ -20,7 +20,6 @@ def ai_stream(
 
     new_kwargs = dict(
         max_tokens=1000,
-        temperature=0.2,
     )
     kwargs = {**new_kwargs, **kwargs}
 
@@ -49,6 +48,7 @@ def ai_stream(
             ],  # type: ignore
             stream=True,
             stream_options=dict(include_usage=True),
+            temperature=0.2,
             **kwargs,
         )
 

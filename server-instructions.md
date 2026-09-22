@@ -1,139 +1,64 @@
 # Server Instructions
 
-Use this guide to host your own API server with a static frontend (for example GitHub Pages).
+Clarity runs as a single FastAPI server (`clarity-api`) that serves the web page, the login
+screen and the `/api/*` endpoints. It listens on `127.0.0.1` only and is exposed to the internet
+through a Cloudflare Tunnel, so no ports need to be forwarded.
 
-## Quick path
-
-1. Point a subdomain (for example `api.example.com`) to your home server.
-2. Forward ports `80` and `443` from your router to that server.
-3. Run `scripts/deploy_api_server.sh`.
-4. Run `scripts/setup_https_proxy.sh`.
-5. Call `https://api.example.com/api/fix` from your frontend.
-
-## 1) Deploy the API service
-
-From your server (inside this repo):
-
-```bash
-export ANTHROPIC_API_KEY=...
-export ALLOWED_ORIGINS=https://<your-site-domain>
-bash scripts/deploy_api_server.sh
+```text
+browser -> https://clarity.ajweeks.com -> Cloudflare -> cloudflared -> 127.0.0.1:9114 (clarity-api)
 ```
 
-Optional overrides:
+## One-time setup
+
+1. Create the tunnel and point the subdomain at it:
+
+   ```bash
+   cloudflared tunnel login          # only if ~/.cloudflared/cert.pem doesn't exist
+   cloudflared tunnel create clarity
+   cloudflared tunnel route dns clarity clarity.ajweeks.com
+   ```
+
+2. Create a Turnstile widget (Cloudflare dashboard > Turnstile > Add widget) with the hostname
+   `clarity.ajweeks.com`, and note its site key and secret key.
+
+3. Create `.env` from the template and fill it in:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   `.env` is gitignored, and `scripts/start_server.sh` makes it readable only by you (`chmod 600`).
+   The session signing secret is generated automatically on first start.
+
+## Start
 
 ```bash
-export CLARITY_PROVIDER=anthropic
-export DEFAULT_MODEL=claude-sonnet-4-6
-export PER_IP_INTERVAL_SECONDS=5
-export GLOBAL_LIMIT_PER_MINUTE=120
-export DAILY_CUTOFF=1000
-export PORT=9114
+make run    # or: bash scripts/start_server.sh
 ```
 
-What the deploy script does:
-- installs `uv` if missing,
-- copies repo files to `/srv/clarity`,
-- installs dependencies,
-- writes `/srv/clarity/.env.api`,
-- installs and starts `clarity-api.service`,
-- checks `http://127.0.0.1:$PORT/health`.
-
-## 2) Set up HTTPS (Caddy or Nginx)
-
-Caddy:
-
-```bash
-export DOMAIN=api.example.com
-export PROXY=caddy
-bash scripts/setup_https_proxy.sh
-```
-
-Nginx + certbot:
-
-```bash
-export DOMAIN=api.example.com
-export EMAIL=you@example.com
-export PROXY=nginx
-bash scripts/setup_https_proxy.sh
-```
-
-Optional:
-
-```bash
-export UPSTREAM=http://127.0.0.1:9114
-```
-
-## DNS note
-
-- static home IP: `A` record for `api` -> your public IP.
-- dynamic home IP: `CNAME` record for `api` -> your DDNS hostname (for example DuckDNS).
+This starts `clarity-api` and `cloudflared`, and stops both on Ctrl+C or if either one exits.
+API keys are only read by the Python server; they never appear on the command line.
 
 ## Verify
 
 ```bash
-curl -i https://api.example.com/health
+curl -i https://clarity.ajweeks.com/health
 ```
 
-## Frontend URL
+## Login
 
-Use this endpoint from your website:
+- The password is `CLARITY_PASSWORD` in `.env`. Changing it signs everyone out.
+- Sessions last `CLARITY_SESSION_DAYS` (default 30) days. Sign out at `/logout`.
+- After `CLARITY_MAX_FAILED_LOGINS` (default 10) wrong passwords, an IP is blocked for 15 minutes.
 
-```text
-https://api.example.com/api/fix
-```
+## API endpoints
 
-## API endpoint reference
+All `/api/*` endpoints need a signed-in session cookie.
 
-`POST /api/fix`
+- `POST /api/fix/stream`: `{"text": "...", "prompt": "optional", "model": "optional"}` streams the corrected text as plain text.
+- `POST /api/fix`: same body, returns `{"corrected_text", "model", "provider"}`.
+- `POST /api/diff`: `{"original", "corrected"}` returns `{"parts": [...]}`, where each part is unchanged text or an `[old, new]` pair.
+- `GET /api/prompts`: the built-in prompts.
+- `GET /health`: no auth needed.
 
-Request body:
-
-```json
-{
-  "text": "teh quik brown fox",
-  "prompt": "optional custom prompt",
-  "model": "optional model override"
-}
-```
-
-Response body:
-
-```json
-{
-  "corrected_text": "the quick brown fox",
-  "model": "claude-sonnet-4-6",
-  "provider": "anthropic"
-}
-```
-
-Example frontend call:
-
-```html
-<script>
-  async function fixText() {
-    const text = document.querySelector('#input').value;
-
-    const res = await fetch('https://api.example.com/api/fix', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.detail || 'Request failed');
-      return;
-    }
-
-    const data = await res.json();
-    document.querySelector('#output').value = data.corrected_text;
-  }
-</script>
-```
-
-## Production hardening notes
-
-- Keep HTTPS enabled (Caddy/Nginx).
-- Forward real client IP (`X-Forwarded-For`) so per-IP limiting works.
-- Current limiter is in-memory (single-server). If you scale out, use Redis.
+Rate limits (env vars): `PER_IP_INTERVAL_SECONDS` (default 5), `GLOBAL_LIMIT_PER_MINUTE` (120), `DAILY_CUTOFF` (1000).

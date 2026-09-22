@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Clarity</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --surface: #f6f7f9; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --accent: #ff4b4b; --accent-fg: #ffffff;
+    --old: #cf222e; --old-bg: rgba(207, 34, 46, 0.08);
+    --new: #1a7f37; --new-bg: rgba(26, 127, 55, 0.08);
+    --warn-bg: #fff8c5; --warn-fg: #6b5300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1117; --surface: #161b22; --fg: #e6edf3; --muted: #8d96a0; --border: #30363d;
+      --old: #ff7b72; --old-bg: rgba(255, 123, 114, 0.1);
+      --new: #56d364; --new-bg: rgba(86, 211, 100, 0.1);
+      --warn-bg: #3b2e00; --warn-fg: #f2cc60;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 18px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  h1 { margin: 0; font-size: 2rem; }
+  h2 { margin: 0; font-size: 1.3rem; }
+  a { color: inherit; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+
+  .prompts { display: flex; flex-wrap: wrap; gap: 8px 18px; border: 0; margin: 0; padding: 0; }
+  .prompts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  details { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  details[open] summary { margin-bottom: 8px; }
+  summary { cursor: pointer; }
+
+  textarea { width: 100%; padding: 10px 12px; font: inherit; color: inherit; background: var(--surface);
+             border: 1px solid var(--border); border-radius: 8px; resize: vertical; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #text { min-height: 220px; }
+  #prompt { min-height: 120px; font-size: 0.9rem; }
+
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  button { font: inherit; padding: 8px 18px; border-radius: 8px; cursor: pointer;
+           border: 1px solid var(--border); background: var(--surface); color: inherit; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  button:disabled { opacity: 0.6; cursor: progress; }
+
+  .error { color: var(--old); }
+  .box { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .stream { white-space: pre-wrap; }
+  .warning { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 10px 14px; }
+  pre { margin: 0; white-space: pre-wrap; font: inherit; }
+
+  /* Diff: each change shows both versions; the chosen one is solid, the other dashed and gray. */
+  .diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chunk { cursor: pointer; }
+  .chunk span { padding: 1px 2px; border: 1px solid; white-space: pre-wrap; }
+  .chunk span:first-child { border-top-left-radius: 5px; border-bottom-left-radius: 5px; }
+  .chunk span:last-child { border-top-right-radius: 5px; border-bottom-right-radius: 5px; }
+  .chunk .old { border-color: var(--old); background: var(--old-bg); }
+  .chunk .new { border-color: var(--new); background: var(--new-bg); }
+  .chunk[data-choice="new"] .old, .chunk[data-choice="old"] .new {
+    color: var(--muted); border-style: dashed; border-color: var(--muted); background: none; user-select: none;
+  }
+  .hint { color: var(--muted); user-select: none; }
+  .legend-old { color: var(--old); }
+  .legend-new { color: var(--new); }
+  footer { color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Clarity</h1>
+    <a class="muted" href="/logout">Sign out</a>
+  </header>
+
+  <fieldset class="prompts" id="prompt-choices" aria-label="Prompt"></fieldset>
+  <details>
+    <summary>Prompt</summary>
+    <textarea id="prompt" maxlength="6000" aria-label="Prompt text"></textarea>
+  </details>
+
+  <form id="fix-form" style="display:grid; gap:12px">
+    <textarea id="text" maxlength="6000" placeholder="Paste your text here…" aria-label="Text to fix" required></textarea>
+    <div class="row">
+      <button type="submit" class="primary" id="fix-btn">Fix</button>
+      <span class="muted">Ctrl+Enter</span>
+      <span class="spacer"></span>
+      <span class="muted" id="count">0 / 6000</span>
+    </div>
+  </form>
+
+  <p class="error" id="error" role="alert" hidden></p>
+
+  <section id="result" hidden style="display:grid; gap:14px">
+    <div class="row">
+      <h2>Corrected text</h2>
+      <span class="spacer"></span>
+      <span id="diff-controls" class="row" hidden>
+        <button type="button" data-all="old" class="legend-old">All original</button>
+        <button type="button" data-all="new" class="legend-new">All suggestions</button>
+        <button type="button" id="copy">Copy</button>
+      </span>
+    </div>
+    <p class="muted" id="diff-help" hidden>
+      <span class="legend-old">Red is yours</span>, <span class="legend-new">green is suggested</span>.
+      Click a change to toggle it. Copy uses whichever version is selected.
+    </p>
+    <div class="box"><div id="output" class="diff"></div></div>
+    <p class="warning">This text was written by a generative AI model. You <strong>always</strong> need to review it.</p>
+    <details>
+      <summary>LLM version of the text</summary>
+      <pre id="raw"></pre>
+    </details>
+  </section>
+
+  <footer>
+    Your text is sent to this server, which does not store it, and forwarded to the model provider.
+    Made by <a href="https://ajweeks.com">AJ Weeks</a>, forked from <a href="https://ddorn.fr">Diego Dorn</a>'s
+    <a href="https://github.com/ddorn/typofixer">typofixer</a>.
+    Source on <a href="https://github.com/ajweeks/clarity">GitHub</a>.
+  </footer>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const els = {
+  choices: $("prompt-choices"), prompt: $("prompt"), form: $("fix-form"), text: $("text"),
+  fixBtn: $("fix-btn"), count: $("count"), error: $("error"), result: $("result"),
+  output: $("output"), raw: $("raw"), controls: $("diff-controls"), help: $("diff-help"), copy: $("copy"),
+};
+let prompts = {};
+let parts = [];
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { credentials: "same-origin", ...options });
+  if (res.status === 401) {
+    location.href = "/login";
+    throw new Error("Signed out");
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Request failed (${res.status})`);
+  }
+  return res;
+}
+
+function showError(message) {
+  els.error.textContent = message || "";
+  els.error.hidden = !message;
+}
+
+// --- Prompts -----------------------------------------------------------------
+
+function selectPrompt(name) {
+  const radio = els.choices.querySelector(`input[value="${CSS.escape(name)}"]`);
+  if (radio) radio.checked = true;
+}
+
+async function loadPrompts() {
+  const data = await (await api("/api/prompts")).json();
+  prompts = data.prompts;
+  for (const name of Object.keys(prompts)) {
+    const label = document.createElement("label");
+    const input = Object.assign(document.createElement("input"), { type: "radio", name: "prompt", value: name });
+    input.addEventListener("change", () => {
+      if (name !== "Custom") els.prompt.value = prompts[name];
+    });
+    label.append(input, name);
+    els.choices.append(label);
+  }
+  selectPrompt(data.default);
+  els.prompt.value = prompts[data.default];
+}
+
+els.prompt.addEventListener("input", () => selectPrompt("Custom"));
+
+// --- Diff rendering ----------------------------------------------------------
+
+function appendText(parent, text) {
+  // Show newlines explicitly inside changes, like ↵
+  text.split("\n").forEach((line, i) => {
+    if (i > 0) {
+      parent.append(Object.assign(document.createElement("span"), { className: "hint", textContent: "↵" }));
+      parent.append(document.createElement("br"));
+    }
+    if (line) parent.append(line);
+  });
+}
+
+function renderDiff(initialChoice = "new") {
+  els.output.replaceChildren();
+  for (const part of parts) {
+    if (typeof part === "string") {
+      els.output.append(part);
+      continue;
+    }
+    const [oldText, newText] = part;
+    const chunk = document.createElement("span");
+    chunk.className = "chunk";
+    chunk.dataset.choice = initialChoice;
+    chunk.tabIndex = 0;
+    chunk.setAttribute("role", "button");
+    for (const [cls, text] of [["old", oldText], ["new", newText]]) {
+      if (!text) continue;
+      const span = document.createElement("span");
+      span.className = cls;
+      appendText(span, text);
+      chunk.append(span);
+    }
+    const toggle = () => { chunk.dataset.choice = chunk.dataset.choice === "new" ? "old" : "new"; };
+    chunk.addEventListener("click", toggle);
+    chunk.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+    });
+    els.output.append(chunk);
+  }
+}
+
+function selectedText() {
+  const chunks = els.output.querySelectorAll(".chunk");
+  let i = 0;
+  return parts.map((part) => {
+    if (typeof part === "string") return part;
+    return chunks[i++].dataset.choice === "old" ? part[0] : part[1];
+  }).join("");
+}
+
+els.controls.addEventListener("click", (e) => {
+  const choice = e.target.dataset?.all;
+  if (choice) els.output.querySelectorAll(".chunk").forEach((c) => { c.dataset.choice = choice; });
+});
+
+els.copy.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(selectedText());
+  els.copy.textContent = "Copied!";
+  setTimeout(() => { els.copy.textContent = "Copy"; }, 1500);
+});
+
+// --- Fixing ------------------------------------------------------------------
+
+async function fix() {
+  const text = els.text.value;
+  if (!text.trim()) return;
+
+  showError("");
+  els.fixBtn.disabled = true;
+  els.fixBtn.textContent = "Fixing…";
+  els.result.hidden = false;
+  els.controls.hidden = els.help.hidden = true;
+  els.output.className = "stream";
+  els.output.textContent = "";
+  els.raw.textContent = "";
+
+  try {
+    const res = await api("/api/fix/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, prompt: els.prompt.value || null }),
+    });
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let corrected = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      corrected += value;
+      els.output.textContent = corrected;
+    }
+    els.raw.textContent = corrected;
+
+    const diff = await (await api("/api/diff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ original: text, corrected }),
+    })).json();
+    parts = diff.parts;
+    els.output.className = "diff";
+    renderDiff();
+    els.controls.hidden = els.help.hidden = false;
+  } catch (err) {
+    showError(err.message);
+    if (!els.output.textContent) els.result.hidden = true;
+  } finally {
+    els.fixBtn.disabled = false;
+    els.fixBtn.textContent = "Fix";
+  }
+}
+
+els.form.addEventListener("submit", (e) => { e.preventDefault(); fix(); });
+els.text.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fix(); }
+});
+els.text.addEventListener("input", () => { els.count.textContent = `${els.text.value.length} / 6000`; });
+
+loadPrompts().catch((err) => showError(err.message));
+</script>
+</body>
+</html>

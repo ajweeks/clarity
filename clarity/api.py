@@ -1,24 +1,34 @@
-import os
-import time
 from collections import defaultdict, deque
 from datetime import UTC, datetime
+import itertools
+import os
+from pathlib import Path
 from threading import Lock
+import time
 
 from anthropic import Anthropic
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 import openai
 from pydantic import BaseModel, Field
 
-from clarity import constants
+from clarity import auth, constants
+from clarity.formatting import mk_diff, pair_up_diff
 from clarity.llm import ai_stream
-from clarity.prompts import DEFAULT_SYSTEM_PROMPT
+from clarity.prompts import DEFAULT_SYSTEM_NAME, DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPTS
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 class FixRequest(BaseModel):
     text: str = Field(min_length=1, max_length=constants.MAX_CHARS)
     prompt: str | None = Field(default=None, max_length=constants.MAX_CHARS)
     model: str | None = None
+
+
+class DiffRequest(BaseModel):
+    original: str = Field(max_length=constants.MAX_CHARS * 2)
+    corrected: str = Field(max_length=constants.MAX_CHARS * 2)
 
 
 class SlidingWindowRateLimiter:
@@ -96,7 +106,7 @@ if provider == "anthropic":
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         base_url=os.getenv("API_BASE"),
     )
-    default_model = os.getenv("DEFAULT_MODEL", "claude-sonnet-4-6")
+    default_model = os.getenv("DEFAULT_MODEL", "claude-sonnet-5")
 else:
     client = openai.OpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
@@ -112,20 +122,10 @@ request_guard = RequestGuard(
 )
 
 
-app = FastAPI(title="Clarity API", version="1.0.0")
+app = FastAPI(title="Clarity", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(auth.router)
 
-allowed_origins = [
-    origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
-    if origin.strip()
-]
-if allowed_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_methods=["POST", "OPTIONS"],
-        allow_headers=["*"],
-    )
+protected = [Depends(auth.require_session)]
 
 
 @app.get("/health")
@@ -133,42 +133,68 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def _get_client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        first_ip = forwarded_for.split(",")[0].strip()
-        if first_ip:
-            return first_ip
-
-    if request.client and request.client.host:
-        return request.client.host
-
-    return "unknown"
+@app.get("/", include_in_schema=False)
+def index(request: Request):
+    if not auth.is_authenticated(request):
+        return RedirectResponse("/login", status_code=303)
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
 
 
-@app.post("/api/fix")
-def fix_text(payload: FixRequest, request: Request) -> dict[str, str]:
-    ip_address = _get_client_ip(request)
+@app.get("/api/prompts", dependencies=protected)
+def prompts() -> dict:
+    return {"prompts": SYSTEM_PROMPTS, "default": DEFAULT_SYSTEM_NAME}
 
-    ok, reason, retry_after = request_guard.allow(ip_address)
+
+@app.post("/api/diff", dependencies=protected)
+def diff(payload: DiffRequest) -> dict:
+    parts = pair_up_diff(mk_diff(payload.original, payload.corrected))
+    # Unchanged text is a string; a change is an [old, new] pair.
+    return {"parts": parts}
+
+
+def _check_rate_limit(request: Request) -> None:
+    ok, reason, retry_after = request_guard.allow(auth.client_ip(request))
     if not ok:
         headers = {}
         if retry_after is not None:
             headers["Retry-After"] = str(max(1, int(retry_after)))
         raise HTTPException(status_code=429, detail=reason, headers=headers)
 
-    system_prompt = payload.prompt or DEFAULT_SYSTEM_PROMPT
-    model = payload.model or default_model
 
+def _start_stream(payload: FixRequest):
+    stream = ai_stream(
+        payload.prompt or DEFAULT_SYSTEM_PROMPT,
+        [dict(role="user", content=payload.text)],
+        model=payload.model or default_model,
+        client=client,
+    )
+    # Pull the first chunk eagerly so upstream errors become a proper HTTP error.
     try:
-        corrected_text = "".join(
-            ai_stream(
-                system_prompt,
-                [dict(role="user", content=payload.text)],
-                model=model,
-                client=client,
-            )
-        )
+        first = next(stream, "")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream LLM request failed: {exc}") from exc
+    return itertools.chain([first], stream)
+
+
+@app.post("/api/fix/stream", dependencies=protected)
+def fix_text_stream(payload: FixRequest, request: Request) -> StreamingResponse:
+    _check_rate_limit(request)
+    return StreamingResponse(
+        _start_stream(payload),
+        media_type="text/plain; charset=utf-8",
+        # no-transform stops Cloudflare from compressing (and therefore buffering) the stream.
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/fix", dependencies=protected)
+def fix_text(payload: FixRequest, request: Request) -> dict[str, str]:
+    _check_rate_limit(request)
+    model = payload.model or default_model
+    try:
+        corrected_text = "".join(_start_stream(payload))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Upstream LLM request failed: {exc}") from exc
 
@@ -184,7 +210,7 @@ def serve() -> None:
 
     uvicorn.run(
         "clarity.api:app",
-        host=os.getenv("HOST", "0.0.0.0"),
+        host=os.getenv("HOST", "127.0.0.1"),
         port=int(os.getenv("PORT", "9114")),
         workers=1,
     )
