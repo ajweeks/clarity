@@ -3,7 +3,7 @@ UV := $(shell command -v uv >/dev/null 2>&1 && echo "uv" || echo "/root/.local/b
 
 # Serve https://clarity.ajweeks.com through the Cloudflare tunnel (needs .env).
 run:
-	bash scripts/start_server.sh
+	bash start.sh
 
 # Local development at http://127.0.0.1:9114 without the login screen.
 dev:

@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Clarity</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <style>
   :root {
     color-scheme: light dark;
@@ -79,7 +84,6 @@
 <main>
   <header>
     <h1>Clarity</h1>
-    <a class="muted" href="/logout">Sign out</a>
   </header>
 
   <fieldset class="prompts" id="prompt-choices" aria-label="Prompt"></fieldset>
@@ -92,8 +96,10 @@
     <textarea id="text" maxlength="6000" placeholder="Paste your text here…" aria-label="Text to fix" required></textarea>
     <div class="row">
       <button type="submit" class="primary" id="fix-btn">Fix</button>
+      <button type="button" id="clear-btn" hidden>Clear</button>
       <span class="muted">Ctrl+Enter</span>
       <span class="spacer"></span>
+      <span class="muted" id="model"></span>
       <span class="muted" id="count">0 / 6000</span>
     </div>
   </form>
@@ -115,6 +121,10 @@
       Click a change to toggle it. Copy uses whichever version is selected.
     </p>
     <div class="box"><div id="output" class="diff"></div></div>
+    <section id="lesson" hidden style="display:grid; gap:8px">
+      <h2>What was wrong</h2>
+      <div class="box"><div id="lesson-body"></div></div>
+    </section>
     <p class="warning">This text was written by a generative AI model. You <strong>always</strong> need to review it.</p>
     <details>
       <summary>LLM version of the text</summary>
@@ -134,16 +144,28 @@
 const $ = (id) => document.getElementById(id);
 const els = {
   choices: $("prompt-choices"), prompt: $("prompt"), form: $("fix-form"), text: $("text"),
-  fixBtn: $("fix-btn"), count: $("count"), error: $("error"), result: $("result"),
+  fixBtn: $("fix-btn"), clearBtn: $("clear-btn"), count: $("count"), error: $("error"), result: $("result"),
   output: $("output"), raw: $("raw"), controls: $("diff-controls"), help: $("diff-help"), copy: $("copy"),
+  lesson: $("lesson"), lessonBody: $("lesson-body"),
 };
 let prompts = {};
+let separator = "---";
 let parts = [];
 
+// Some mobile browsers (e.g. DuckDuckGo) drop the session cookie, so the token from sign-in
+// is also kept in localStorage and sent as a Bearer header; the server falls back to the cookie.
+const TOKEN_KEY = "clarity_session";
+function getToken() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
+function clearToken() { try { localStorage.removeItem(TOKEN_KEY); } catch {} }
+
 async function api(path, options = {}) {
-  const res = await fetch(path, { credentials: "same-origin", ...options });
+  const headers = { ...options.headers };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { credentials: "same-origin", ...options, headers });
   if (res.status === 401) {
-    location.href = "/login";
+    clearToken();
+    location.replace("/login");
     throw new Error("Signed out");
   }
   if (!res.ok) {
@@ -167,13 +189,13 @@ function selectPrompt(name) {
 
 async function loadPrompts() {
   const data = await (await api("/api/prompts")).json();
+  $("model").textContent = data.model || "";
   prompts = data.prompts;
+  separator = data.separator || separator;
   for (const name of Object.keys(prompts)) {
     const label = document.createElement("label");
     const input = Object.assign(document.createElement("input"), { type: "radio", name: "prompt", value: name });
-    input.addEventListener("change", () => {
-      if (name !== "Custom") els.prompt.value = prompts[name];
-    });
+    input.addEventListener("change", () => { els.prompt.value = prompts[name]; });
     label.append(input, name);
     els.choices.append(label);
   }
@@ -181,7 +203,11 @@ async function loadPrompts() {
   els.prompt.value = prompts[data.default];
 }
 
-els.prompt.addEventListener("input", () => selectPrompt("Custom"));
+els.prompt.addEventListener("input", () => {
+  // An edited prompt no longer matches a preset, so clear the selection.
+  const match = Object.keys(prompts).find((name) => prompts[name] === els.prompt.value);
+  els.choices.querySelectorAll("input").forEach((input) => { input.checked = input.value === match; });
+});
 
 // --- Diff rendering ----------------------------------------------------------
 
@@ -245,6 +271,38 @@ els.copy.addEventListener("click", async () => {
   setTimeout(() => { els.copy.textContent = "Copy"; }, 1500);
 });
 
+// --- Teacher mode ------------------------------------------------------------
+
+function splitLesson(text) {
+  // "Teacher" prompts end the corrected text with a line containing only the separator.
+  const lines = text.split("\n");
+  const at = lines.findIndex((line) => line.trim() === separator);
+  if (at === -1) return [text, ""];
+  return [lines.slice(0, at).join("\n").trimEnd(), lines.slice(at + 1).join("\n").trim()];
+}
+
+function renderLesson(lesson) {
+  const list = document.createElement("ul");
+  list.style.margin = "0";
+  list.style.paddingLeft = "20px";
+  let current = null;
+  for (const line of lesson.split("\n")) {
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    if (bullet) {
+      current = document.createElement("li");
+      current.textContent = bullet[1];
+      list.append(current);
+    } else if (line.trim() && current) {
+      current.textContent += " " + line.trim();
+    } else if (line.trim()) {
+      const para = document.createElement("p");
+      para.textContent = line.trim();
+      els.lessonBody.append(para);
+    }
+  }
+  if (list.childElementCount) els.lessonBody.append(list);
+}
+
 // --- Fixing ------------------------------------------------------------------
 
 async function fix() {
@@ -254,8 +312,9 @@ async function fix() {
   showError("");
   els.fixBtn.disabled = true;
   els.fixBtn.textContent = "Fixing…";
+  els.clearBtn.hidden = true;
   els.result.hidden = false;
-  els.controls.hidden = els.help.hidden = true;
+  els.controls.hidden = els.help.hidden = els.lesson.hidden = true;
   els.output.className = "stream";
   els.output.textContent = "";
   els.raw.textContent = "";
@@ -276,6 +335,12 @@ async function fix() {
     }
     els.raw.textContent = corrected;
 
+    const [fixed, lesson] = splitLesson(corrected);
+    corrected = fixed;
+    els.lessonBody.replaceChildren();
+    if (lesson) renderLesson(lesson);
+    els.lesson.hidden = !lesson;
+
     const diff = await (await api("/api/diff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -291,10 +356,23 @@ async function fix() {
   } finally {
     els.fixBtn.disabled = false;
     els.fixBtn.textContent = "Fix";
+    els.clearBtn.hidden = els.result.hidden;
   }
 }
 
 els.form.addEventListener("submit", (e) => { e.preventDefault(); fix(); });
+
+els.clearBtn.addEventListener("click", () => {
+  els.text.value = "";
+  els.count.textContent = "0 / 6000";
+  parts = [];
+  showError("");
+  els.result.hidden = els.clearBtn.hidden = true;
+  els.output.textContent = els.raw.textContent = "";
+  els.lessonBody.replaceChildren();
+  els.text.focus();
+});
+
 els.text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fix(); }
 });

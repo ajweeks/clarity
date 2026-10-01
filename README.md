@@ -7,8 +7,6 @@ It's simple.
     :red[red text is yours], :green[green is suggestions].
 4. Click to toggle diffs between the original and new version.
 
-![Clarity](./images/screenshot.webp)
-
 ## Run locally
 
 ```bash

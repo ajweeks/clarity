@@ -8,14 +8,14 @@ import time
 
 from anthropic import Anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import openai
 from pydantic import BaseModel, Field
 
 from clarity import auth, constants
 from clarity.formatting import mk_diff, pair_up_diff
 from clarity.llm import ai_stream
-from clarity.prompts import DEFAULT_SYSTEM_NAME, DEFAULT_SYSTEM_PROMPT, SYSTEM_PROMPTS
+from clarity.prompts import DEFAULT_SYSTEM_NAME, DEFAULT_SYSTEM_PROMPT, SEPARATOR, SYSTEM_PROMPTS
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -106,13 +106,26 @@ if provider == "anthropic":
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         base_url=os.getenv("API_BASE"),
     )
-    default_model = os.getenv("DEFAULT_MODEL", "claude-sonnet-5")
+    default_model = os.getenv("DEFAULT_MODEL", "claude-sonnet-5-5")
+    # Adaptive thinking depth: low | medium | high | xhigh | max.
+    default_effort = os.getenv("DEFAULT_EFFORT", "medium")
 else:
     client = openai.OpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
         base_url=os.getenv("API_BASE"),
     )
     default_model = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+    default_effort = None
+
+
+def model_label(model: str, effort: str | None) -> str:
+    """Human-readable model name, e.g. "claude-sonnet-5-5" -> "Sonnet 5.5 · medium thinking"."""
+    if model.startswith("claude-"):
+        family, *version = model.removeprefix("claude-").split("-")
+        # Drop dated snapshot suffixes like "20250929".
+        version = [v for v in version if not (v.isdigit() and len(v) == 8)]
+        model = " ".join([family.title(), ".".join(version)]).strip()
+    return f"{model} · {effort} thinking" if effort else model
 
 
 request_guard = RequestGuard(
@@ -134,15 +147,38 @@ def health() -> dict[str, str]:
 
 
 @app.get("/", include_in_schema=False)
-def index(request: Request):
-    if not auth.is_authenticated(request):
-        return RedirectResponse("/login", status_code=303)
+def index():
+    # Served without a session check: browsers that drop the cookie authenticate with a Bearer
+    # token from localStorage, which a navigation can't send. The page redirects to /login on 401.
     return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
+
+
+ICON_FILES = {
+    "favicon.ico",
+    "favicon-16x16.png",
+    "favicon-32x32.png",
+    "apple-touch-icon.png",
+    "android-chrome-192x192.png",
+    "android-chrome-512x512.png",
+    "site.webmanifest",
+}
+
+
+@app.get("/{name}", include_in_schema=False)
+def icon(name: str):
+    if name not in ICON_FILES:
+        raise HTTPException(status_code=404)
+    return FileResponse(STATIC_DIR / name, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/prompts", dependencies=protected)
 def prompts() -> dict:
-    return {"prompts": SYSTEM_PROMPTS, "default": DEFAULT_SYSTEM_NAME}
+    return {
+        "prompts": SYSTEM_PROMPTS,
+        "default": DEFAULT_SYSTEM_NAME,
+        "separator": SEPARATOR,
+        "model": model_label(default_model, default_effort),
+    }
 
 
 @app.post("/api/diff", dependencies=protected)
@@ -162,11 +198,21 @@ def _check_rate_limit(request: Request) -> None:
 
 
 def _start_stream(payload: FixRequest):
+    model = payload.model or default_model
+    extra = {}
+    if "claude" in model:
+        # Thinking tokens count toward max_tokens, so leave plenty of room beyond the answer.
+        extra = dict(
+            max_tokens=16000,
+            thinking={"type": "adaptive"},
+            output_config={"effort": default_effort or "medium"},
+        )
     stream = ai_stream(
         payload.prompt or DEFAULT_SYSTEM_PROMPT,
         [dict(role="user", content=payload.text)],
-        model=payload.model or default_model,
+        model=model,
         client=client,
+        **extra,
     )
     # Pull the first chunk eagerly so upstream errors become a proper HTTP error.
     try:

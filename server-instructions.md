@@ -27,13 +27,13 @@ browser -> https://clarity.ajweeks.com -> Cloudflare -> cloudflared -> 127.0.0.1
    cp .env.example .env
    ```
 
-   `.env` is gitignored, and `scripts/start_server.sh` makes it readable only by you (`chmod 600`).
+   `.env` is gitignored, and `start.sh` makes it readable only by you (`chmod 600`).
    The session signing secret is generated automatically on first start.
 
 ## Start
 
 ```bash
-make run    # or: bash scripts/start_server.sh
+make run    # or: bash start.sh
 ```
 
 This starts `clarity-api` and `cloudflared`, and stops both on Ctrl+C or if either one exits.
@@ -58,7 +58,11 @@ All `/api/*` endpoints need a signed-in session cookie.
 - `POST /api/fix/stream`: `{"text": "...", "prompt": "optional", "model": "optional"}` streams the corrected text as plain text.
 - `POST /api/fix`: same body, returns `{"corrected_text", "model", "provider"}`.
 - `POST /api/diff`: `{"original", "corrected"}` returns `{"parts": [...]}`, where each part is unchanged text or an `[old, new]` pair.
-- `GET /api/prompts`: the built-in prompts.
+- `GET /api/prompts`: the built-in prompts, plus the `separator` used by the "Teacher" prompt.
 - `GET /health`: no auth needed.
+
+The "Teacher" prompt asks the model for the corrected text, a line containing only `---`, then bullets
+explaining each mistake. The page splits on that line: the text above it goes into the diff, and the
+bullets are shown under "What was wrong".
 
 Rate limits (env vars): `PER_IP_INTERVAL_SECONDS` (default 5), `GLOBAL_LIMIT_PER_MINUTE` (120), `DAILY_CUTOFF` (1000).

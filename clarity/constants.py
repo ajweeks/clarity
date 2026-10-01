@@ -13,6 +13,7 @@ ANTHROPIC_MODEL = "claude-2.1"
 CHEAPEST_MODEL = "gpt-4o-mini"
 CHEAP_BUT_GOOD = "gpt-4o-mini"
 MODELS_COSTS = {
+    "claude-sonnet-5-5": (3, 15),
     "claude-3-5-sonnet-20240620": (3, 15),
     "gpt-4o": (5, 15),
     "gpt-4o-2024-08-06": (5, 15),

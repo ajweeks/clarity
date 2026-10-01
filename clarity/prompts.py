@@ -1,5 +1,8 @@
 from textwrap import dedent
 
+# Marks the end of the corrected text in "Teacher" mode; everything after it is the explanation.
+SEPARATOR = "---"
+
 SYSTEM_PROMPTS = {
     "Fix typos": dedent(
         """
@@ -17,7 +20,20 @@ SYSTEM_PROMPTS = {
         Output only the revised text with no commentary.
         """
     ).strip(),
-    "Custom": "",
+    "Teacher": dedent(
+        f"""
+        You are a patient writing teacher. First correct the text: fix spelling, grammar, punctuation,
+        and awkward phrasing while preserving the meaning and tone.
+
+        Then, on a line containing only {SEPARATOR}, explain what was wrong.
+        Write one short bullet per correction, in the form `- "mistake" -> "fix": the rule or reason`.
+        Name the rule when there is one (for example subject-verb agreement, comma splice, dangling modifier).
+        Group repeated mistakes into a single bullet. Skip bullets for changes that are purely stylistic.
+        If the text had no mistakes, say so in one bullet.
+
+        Output the corrected text, then {SEPARATOR}, then the bullets. Nothing else.
+        """
+    ).strip(),
 }
 
 DEFAULT_SYSTEM_NAME = "Fix typos"
